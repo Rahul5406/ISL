@@ -1,12 +1,17 @@
 """
 STEP 3 - Real-time ISL Detection
 ==================================
-Live webcam-based ISL gesture detection.
+Live webcam-based ISL gesture detection with 2-hand support.
 Features:
-  - MediaPipe hand landmark extraction
+  - MediaPipe hand landmark extraction (up to 2 hands)
   - Prediction smoothing (majority vote over last N frames)
   - Confidence bar UI
   - Prediction history log
+  - Sentence generation from detected gestures
+
+⚠️  IMPORTANT: This version now requires 2-hand trained model!
+    - Make sure you've recollected data with 2_train_model.py
+    - Run 2_train_model.py to create the new model
 
 Usage:
     python 3_detect_realtime.py
@@ -210,7 +215,7 @@ def main():
 
     hands = mp_hands.Hands(
         static_image_mode=False,
-        max_num_hands=1,
+        max_num_hands=2,  # Detect up to 2 hands
         min_detection_confidence=0.7,
         min_tracking_confidence=0.7
     )
@@ -248,6 +253,7 @@ def main():
         result = hands.process(rgb)
 
         if result.multi_hand_landmarks:
+            # Draw all detected hands
             for hand_lms in result.multi_hand_landmarks:
                 mp_draw.draw_landmarks(
                     frame, hand_lms, mp_hands.HAND_CONNECTIONS,
@@ -255,28 +261,34 @@ def main():
                     mp_style.get_default_hand_connections_style()
                 )
 
-                features = []
-                for lm in hand_lms.landmark:
-                    features.extend([lm.x, lm.y, lm.z])
+            # Extract features from both hands (pad with zeros if only 1 hand)
+            features = []
+            for hand_idx in range(2):
+                if hand_idx < len(result.multi_hand_landmarks):
+                    for lm in result.multi_hand_landmarks[hand_idx].landmark:
+                        features.extend([lm.x, lm.y, lm.z])
+                else:
+                    # Pad with zeros for missing hand (21 landmarks × 3 axes)
+                    features.extend([0.0] * 63)
 
-                features    = np.array(features).reshape(1, -1)
-                proba       = model.predict_proba(features)[0]
-                pred_idx    = np.argmax(proba)
-                confidence  = float(proba[pred_idx])
-                pred_label  = le.inverse_transform([pred_idx])[0]
-                pred_gesture = LETTER_TO_GESTURE.get(pred_label, pred_label)
+            features    = np.array(features).reshape(1, -1)
+            proba       = model.predict_proba(features)[0]
+            pred_idx    = np.argmax(proba)
+            confidence  = float(proba[pred_idx])
+            pred_label  = le.inverse_transform([pred_idx])[0]
+            pred_gesture = LETTER_TO_GESTURE.get(pred_label, pred_label)
 
-                smooth_buffer.append(pred_gesture)
-                smoothed = Counter(smooth_buffer).most_common(1)[0][0]
+            smooth_buffer.append(pred_gesture)
+            smoothed = Counter(smooth_buffer).most_common(1)[0][0]
 
-                if confidence >= CONFIDENCE_THRESH:
-                    last_pred = smoothed
-                    last_conf = confidence
-                    if not history or history[-1][0] != smoothed:
-                        history.append((smoothed, confidence))
-                        detected_gestures.append(smoothed)
+            if confidence >= CONFIDENCE_THRESH:
+                last_pred = smoothed
+                last_conf = confidence
+                if not history or history[-1][0] != smoothed:
+                    history.append((smoothed, confidence))
+                    detected_gestures.append(smoothed)
         else:
-            cv2.putText(frame, "Show your hand to the camera...",
+            cv2.putText(frame, "Show your hand(s) to the camera...",
                         (15, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.75, C_ORANGE, 2)
 
         # Generate sentence from detected gestures

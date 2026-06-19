@@ -34,13 +34,16 @@ pip install -r requirements.txt
 ```
 Webcam Frame
     ↓
-MediaPipe Hands
+MediaPipe Hands (up to 2 hands)
     ↓
-21 Landmarks (x, y, z) = 63 features
+42 Landmarks (x, y, z) = 126 features
+(21 landmarks × 3 axes × 2 hands, with padding for 1-hand signs)
     ↓
 Random Forest Classifier
     ↓
 ISL Gesture Label + Confidence
+    ↓
+Sentence Generation
 ```
 
 ---

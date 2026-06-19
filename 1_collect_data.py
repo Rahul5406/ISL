@@ -2,7 +2,12 @@
 STEP 1 - ISL Data Collection
 ==============================
 Run this script to collect training data for each ISL gesture.
-It uses MediaPipe to extract 21 hand landmarks (x, y, z) = 63 features.
+It uses MediaPipe to extract landmarks from up to 2 hands (42 landmarks × 3 axes = 126 features).
+
+⚠️  IMPORTANT: This version now supports 2-hand signs!
+    - If you previously collected data with 1-hand mode, please DELETE 'data/isl_data.csv'
+    - Re-run this script to collect new data with 2-hand support
+    - Then run 2_train_model.py to retrain the model
 
 Usage:
     python 1_collect_data.py
@@ -49,7 +54,7 @@ mp_hands = mp.solutions.hands
 mp_draw  = mp.solutions.drawing_utils
 hands    = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1,
+    max_num_hands=2,  # Detect up to 2 hands
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7
 )
@@ -59,14 +64,22 @@ def init_csv():
     if not os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'w', newline='') as f:
             writer = csv.writer(f)
-            header = [f'{axis}{i}' for i in range(21) for axis in ['x','y','z']] + ['label']
+            # 126 features: 21 landmarks × 3 axes × 2 hands
+            header = [f'{axis}{i}' for i in range(42) for axis in ['x','y','z']] + ['label']
             writer.writerow(header)
-        print(f"[INFO] Created {DATA_FILE}")
+        print(f"[INFO] Created {DATA_FILE} with 2-hand support (126 features)")
 
-def save_landmarks(landmarks, label):
+def save_landmarks(hand_landmarks_list, label):
+    """Save features from up to 2 hands. Pad with zeros if only 1 hand detected."""
     row = []
-    for lm in landmarks.landmark:
-        row.extend([lm.x, lm.y, lm.z])
+    # Always create space for 2 hands (42 landmarks)
+    for hand_idx in range(2):
+        if hand_idx < len(hand_landmarks_list):
+            for lm in hand_landmarks_list[hand_idx].landmark:
+                row.extend([lm.x, lm.y, lm.z])
+        else:
+            # Pad with zeros for missing hand
+            row.extend([0.0] * 63)  # 21 landmarks × 3 axes
     row.append(label)
     with open(DATA_FILE, 'a', newline='') as f:
         csv.writer(f).writerow(row)
@@ -104,9 +117,10 @@ def main():
             for hand_lms in result.multi_hand_landmarks:
                 mp_draw.draw_landmarks(frame, hand_lms, mp_hands.HAND_CONNECTIONS)
 
-                if collecting and count < SAMPLES_PER_GESTURE:
-                    save_landmarks(hand_lms, current_gesture)
-                    count += 1
+            # Save all detected hands together
+            if collecting and count < SAMPLES_PER_GESTURE:
+                save_landmarks(result.multi_hand_landmarks, current_gesture)
+                count += 1
 
         # Status overlay
         if collecting:

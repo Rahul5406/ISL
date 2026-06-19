@@ -2,7 +2,10 @@
 STEP 2 - ISL Model Training
 ==============================
 Trains a Random Forest classifier on the collected landmark data.
+Supports both 1-hand and 2-hand signs (up to 126 features for 2 hands).
 Saves the model + label encoder to model/ directory.
+
+\u26a0\ufe0f  IMPORTANT: Re-run 1_collect_data.py first to collect data with 2-hand support!
 
 Usage:
     python 2_train_model.py
